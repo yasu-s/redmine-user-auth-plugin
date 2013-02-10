@@ -30,6 +30,9 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
     /** Logger */
     private static final Logger LOGGER = Logger.getLogger(RedmineSecurityRealm.class.getName());
 
+    /** Redmine DBMS */
+    private final String dbms;
+
     /** DB Server */
     private final String dbServer;
 
@@ -63,6 +66,7 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
 
     /**
      * Constructor
+     * @param dbms         Redmine DBMS
      * @param dbServer     DB Server
      * @param databaseName Database Name
      * @param port         Database Port
@@ -75,12 +79,18 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
      * @param saltField    Redmine Salt Field
      */
     @DataBoundConstructor
-    public RedmineSecurityRealm(String dbServer, String databaseName, String port, String dbUserName, String dbPassword,
+    public RedmineSecurityRealm(String dbms, String dbServer, String databaseName, String port, String dbUserName, String dbPassword,
             String version, String loginTable, String userField, String passField, String saltField) {
 
+        this.dbms         = StringUtil.isNullOrEmpty(dbms)         ? Constants.DBMS_MYSQL              : dbms;
         this.dbServer     = StringUtil.isNullOrEmpty(dbServer)     ? Constants.DEFAULT_DB_SERVER       : dbServer;
         this.databaseName = StringUtil.isNullOrEmpty(databaseName) ? Constants.DEFAULT_DATABASE_NAME   : databaseName;
-        this.port         = StringUtil.isNullOrEmpty(port)         ? Constants.DEFAULT_PORT_MYSQL      : port;
+
+        if (StringUtil.isNullOrEmpty(port))
+            this.port = (Constants.DBMS_MYSQL.equals(this.dbms)) ? (Constants.DEFAULT_PORT_MYSQL) : (Constants.DBMS_POSTGRESQL);
+        else
+            this.port = port;
+
         this.dbUserName   = dbUserName;
         this.dbPassword   = dbPassword;
         this.version      = StringUtil.isNullOrEmpty(version)      ? Constants.VERSION_1_2_0           : version;
@@ -95,7 +105,7 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
     public static final class DescriptorImpl extends Descriptor<SecurityRealm> {
         @Override
         public String getHelpFile() {
-            return "/plugin/redmine-db-auth/help/overview.html";
+            return "/plugin/redmine-user-auth/help/overview.html";
         }
 
         @Override
@@ -135,7 +145,12 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
         AbstractAuthDao dao = null;
 
         try {
-            dao = new MySQLAuthDao();
+            dao = createAuthDao(this.dbms);
+
+            LOGGER.info("Redmine DBMS      : " + this.dbms);
+            LOGGER.info("DB Server         : " + this.dbServer);
+            LOGGER.info("DB Port           : " + this.port);
+            LOGGER.info("Database Name     : " + this.databaseName);
 
             dao.open(this.dbServer, this.port, this.databaseName, this.dbUserName, this.dbPassword);
 
@@ -183,7 +198,7 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
         AbstractAuthDao dao = null;
 
         try {
-            dao = new MySQLAuthDao();
+            dao = createAuthDao(this.dbms);
 
             dao.open(this.dbServer, this.port, this.databaseName, this.dbUserName, this.dbPassword);
 
@@ -210,6 +225,20 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
         }
     }
 
+    /**
+     * Create Auth Dao
+     * @param  dbms
+     * @return
+     */
+    private AbstractAuthDao createAuthDao(String dbms) {
+        if (Constants.DBMS_MYSQL.equals(dbms))
+            return new MySQLAuthDao();
+        else if (Constants.DBMS_POSTGRESQL.equals(dbms))
+            return new PostgreSQLAuthDao();
+        else
+            return null;
+    }
+
     @Override
     public GroupDetails loadGroupByGroupname(String groupname) throws UsernameNotFoundException, DataAccessException {
         throw new UsernameNotFoundException("RedmineSecurityRealm: Non-supported function");
@@ -227,6 +256,14 @@ public class RedmineSecurityRealm extends AbstractPasswordBasedSecurityRealm {
         return new RedmineUserDetails(username, password, true, true, true, true, groups.toArray(new GrantedAuthority[groups.size()]));
     }
 
+
+    /**
+     *
+     * @return
+     */
+    public String getDbms() {
+        return dbms;
+    }
 
     /**
      *

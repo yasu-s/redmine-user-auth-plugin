@@ -11,15 +11,15 @@ import org.jenkinsci.plugins.redmine_user_auth.util.StringUtil;
 /**
  * @author Yasuyuki Saito
  */
-public class MySQLAuthDao extends AbstractAuthDao {
+public class PostgreSQLAuthDao extends AbstractAuthDao {
 
     @Override
     public void open(String dbServer, String port, String databaseName, String dbUserName, String dbPassword)
             throws RedmineAuthenticationException {
         try {
-            String connectionString = String.format(Constants.CONNECTION_STRING_FORMAT_MYSQL, dbServer, port, databaseName);
+            String connectionString = String.format(Constants.CONNECTION_STRING_FORMAT_POSTGRESQL, dbServer, port, databaseName);
 
-            Class.forName(Constants.JDBC_DRIVER_NAME_MYSQL).newInstance();
+            Class.forName(Constants.JDBC_DRIVER_NAME_POSTGRESQL).newInstance();
             conn = DriverManager.getConnection(connectionString, dbUserName, dbPassword);
         } catch (SQLException e) {
             throw new RedmineAuthenticationException("RedmineSecurity: Connection Error", e);
@@ -34,7 +34,7 @@ public class MySQLAuthDao extends AbstractAuthDao {
         ResultSet results = null;
 
         try {
-            String query = "SHOW TABLES";
+            String query = "select tablename from pg_tables";
             state = conn.prepareStatement(query);
             results = state.executeQuery();
 
@@ -69,8 +69,15 @@ public class MySQLAuthDao extends AbstractAuthDao {
         ResultSet results = null;
 
         try {
-            String query = String.format("SHOW FIELDS FROM %s", table);
-            state = conn.prepareStatement(query);
+            StringBuilder query = new StringBuilder();
+            query.append("select attname ");
+            query.append("from pg_attribute ");
+            query.append("where attnum > 0 ");
+            query.append("  and attrelid = (select relfilenode from pg_class where relname = ?) ");
+
+            state = conn.prepareStatement(query.toString());
+            state.setString(1, table);
+
             results = state.executeQuery();
 
             if (results == null)
